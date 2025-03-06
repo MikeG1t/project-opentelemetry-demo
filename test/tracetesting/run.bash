@@ -1,13 +1,11 @@
-# Copyright The OpenTelemetry Authors
-# SPDX-License-Identifier: Apache-2.0
 #/bin/bash
 
-# This script set up how to run Tracetest and which test files 
-# be executed
+# This script sets up how to run Tracetest and which test files 
+# to be executed
 
 set -e
 
-# Availalble services to test
+# Available services to test
 ALL_SERVICES=("ad" "cart" "currency" "checkout" "frontend" "email" "payment" "product-catalog" "recommendation" "shipping")
 
 ## Script variables
@@ -54,8 +52,12 @@ spec:
       value: $RECOMMENDATION_ADDR
     - key: SHIPPING_ADDR
       value: $SHIPPING_ADDR
-    - key: KAFKA_ADDR
-      value: $KAFKA_ADDR
+    - key: CONFLUENT_BROKER
+      value: $CONFLUENT_BROKER
+    - key: CONFLUENT_API_KEY
+      value: $CONFLUENT_API_KEY
+    - key: CONFLUENT_API_SECRET
+      value: $CONFLUENT_API_SECRET
 EOF
 }
 

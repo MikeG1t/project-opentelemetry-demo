@@ -7,11 +7,14 @@ package frauddetection
 
 import org.apache.kafka.clients.consumer.ConsumerConfig.*
 import org.apache.kafka.clients.consumer.KafkaConsumer
+import org.apache.kafka.common.config.SaslConfigs
+import org.apache.kafka.common.config.SslConfigs
+import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
 import org.apache.kafka.common.serialization.StringDeserializer
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
-import oteldemo.Demo.*
+import oteldemo.Demo.OrderResult
 import java.time.Duration.ofMillis
 import java.util.*
 import kotlin.system.exitProcess
@@ -23,6 +26,7 @@ import dev.openfeature.sdk.ImmutableContext
 import dev.openfeature.sdk.Value
 import dev.openfeature.sdk.OpenFeatureAPI
 
+
 const val topic = "orders"
 const val groupID = "fraud-detection"
 
@@ -30,8 +34,8 @@ private val logger: Logger = LogManager.getLogger(groupID)
 
 fun main() {
     val options = FlagdOptions.builder()
-    .withGlobalTelemetry(true)
-    .build()
+        .withGlobalTelemetry(true)
+        .build()
     val flagdProvider = FlagdProvider(options)
     OpenFeatureAPI.getInstance().setProvider(flagdProvider)
 
@@ -39,12 +43,22 @@ fun main() {
     props[KEY_DESERIALIZER_CLASS_CONFIG] = StringDeserializer::class.java.name
     props[VALUE_DESERIALIZER_CLASS_CONFIG] = ByteArrayDeserializer::class.java.name
     props[GROUP_ID_CONFIG] = groupID
-    val bootstrapServers = System.getenv("KAFKA_ADDR")
-    if (bootstrapServers == null) {
-        println("KAFKA_ADDR is not supplied")
+
+    val broker = System.getenv("CONFLUENT_BROKER")
+    val apiKey = System.getenv("CONFLUENT_API_KEY")
+    val apiSecret = System.getenv("CONFLUENT_API_SECRET")
+
+    if (broker == null || apiKey == null || apiSecret == null) {
+        println("Confluent Cloud configuration not found in environment variables. Please set CONFLUENT_BROKER, CONFLUENT_API_KEY, and CONFLUENT_API_SECRET")
         exitProcess(1)
     }
-    props[BOOTSTRAP_SERVERS_CONFIG] = bootstrapServers
+
+    props[BOOTSTRAP_SERVERS_CONFIG] = broker
+    props[SaslConfigs.SASL_MECHANISM] = "PLAIN"
+    props[SaslConfigs.SASL_JAAS_CONFIG] = "org.apache.kafka.common.security.plain.PlainLoginModule required username=\"$apiKey\" password=\"$apiSecret\";"
+    props[CommonClientConfigs.SECURITY_PROTOCOL_CONFIG] = "SASL_SSL"
+    props[SslConfigs.SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG] = "https"
+
     val consumer = KafkaConsumer<String, ByteArray>(props).apply {
         subscribe(listOf(topic))
     }
@@ -70,11 +84,11 @@ fun main() {
 }
 
 /**
-* Retrieves the status of a feature flag from the Feature Flag service.
-*
-* @param ff The name of the feature flag to retrieve.
-* @return `true` if the feature flag is enabled, `false` otherwise or in case of errors.
-*/
+ * Retrieves the status of a feature flag from the Feature Flag service.
+ *
+ * @param ff The name of the feature flag to retrieve.
+ * @return `true` if the feature flag is enabled, `false` otherwise or in case of errors.
+ */
 fun getFeatureFlagValue(ff: String): Int {
     val client = OpenFeatureAPI.getInstance().client
     // TODO: Plumb the actual session ID from the frontend via baggage?

@@ -19,13 +19,17 @@ internal class Consumer : IDisposable
     {
         _logger = logger;
 
-        var servers = Environment.GetEnvironmentVariable("KAFKA_ADDR")
-            ?? throw new ArgumentNullException("KAFKA_ADDR");
+        var servers = Environment.GetEnvironmentVariable("CONFLUENT_BROKER")
+            ?? throw new ArgumentNullException("CONFLUENT_BROKER");
+        var apiKey = Environment.GetEnvironmentVariable("CONFLUENT_API_KEY")
+            ?? throw new ArgumentNullException("CONFLUENT_API_KEY");
+        var apiSecret = Environment.GetEnvironmentVariable("CONFLUENT_API_SECRET")
+            ?? throw new ArgumentNullException("CONFLUENT_API_SECRET");
 
-        _consumer = BuildConsumer(servers);
+        _consumer = BuildConsumer(servers, apiKey, apiSecret);
         _consumer.Subscribe(TopicName);
 
-        _logger.LogInformation($"Connecting to Kafka: {servers}");
+        _logger.LogInformation($"Connecting to Confluent Cloud Kafka: {servers}");
     }
 
     public void StartListening()
@@ -70,15 +74,18 @@ internal class Consumer : IDisposable
         }
     }
 
-    private IConsumer<string, byte[]> BuildConsumer(string servers)
+    private IConsumer<string, byte[]> BuildConsumer(string servers, string apiKey, string apiSecret)
     {
         var conf = new ConsumerConfig
         {
             GroupId = $"accounting",
             BootstrapServers = servers,
-            // https://github.com/confluentinc/confluent-kafka-dotnet/tree/07de95ed647af80a0db39ce6a8891a630423b952#basic-consumer-example
             AutoOffsetReset = AutoOffsetReset.Earliest,
-            EnableAutoCommit = true
+            EnableAutoCommit = true,
+            SecurityProtocol = SecurityProtocol.SaslSsl,
+            SaslMechanism = SaslMechanism.Plain,
+            SaslUsername = apiKey,
+            SaslPassword = apiSecret
         };
 
         return new ConsumerBuilder<string, byte[]>(conf)

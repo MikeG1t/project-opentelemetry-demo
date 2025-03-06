@@ -15,9 +15,9 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
+	otelcodes "go.opentelemetry.io/otel/codes"
 	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
 	"go.opentelemetry.io/otel/trace"
-	otelcodes "go.opentelemetry.io/otel/codes"
 
 	"github.com/IBM/sarama"
 	"github.com/google/uuid"
@@ -29,7 +29,6 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/contrib/instrumentation/runtime"
 	"go.opentelemetry.io/otel"
-	otelcodes "go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/propagation"
@@ -198,10 +197,12 @@ func main() {
 	svc.paymentSvcClient = pb.NewPaymentServiceClient(c)
 	defer c.Close()
 
-	svc.kafkaBrokerSvcAddr = os.Getenv("KAFKA_ADDR")
+	svc.kafkaBrokerSvcAddr = os.Getenv("CONFLUENT_BROKER")
+	confluentAPIKey := os.Getenv("CONFLUENT_API_KEY")
+	confluentAPISecret := os.Getenv("CONFLUENT_API_SECRET")
 
-	if svc.kafkaBrokerSvcAddr != "" {
-		svc.KafkaProducerClient, err = kafka.CreateKafkaProducer([]string{svc.kafkaBrokerSvcAddr}, log)
+	if svc.kafkaBrokerSvcAddr != "" && confluentAPIKey != "" && confluentAPISecret != "" {
+		svc.KafkaProducerClient, err = kafka.CreateKafkaProducer(log)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -336,7 +337,7 @@ type orderPrep struct {
 func (cs *checkout) prepareOrderItemsAndShippingQuoteFromCart(ctx context.Context, userID, userCurrency string, address *pb.Address) (orderPrep, error) {
 
 	ctx, span := tracer.Start(ctx, "prepareOrderItemsAndShippingQuoteFromCart")
-    defer span.End()
+	defer span.End()
 
 	var out orderPrep
 	cartItems, err := cs.getUserCart(ctx, userID)
@@ -345,9 +346,9 @@ func (cs *checkout) prepareOrderItemsAndShippingQuoteFromCart(ctx context.Contex
 	}
 	orderItems, err := cs.prepOrderItems(ctx, cartItems, userCurrency)
 	if err != nil {
-        msg := fmt.Sprintf("Error: ProductCatalogService Fail Feature Flag Enabled")
-        span.SetStatus(otelcodes.Error, msg)
-        span.AddEvent(msg)
+		msg := fmt.Sprintf("Error: ProductCatalogService Fail Feature Flag Enabled")
+		span.SetStatus(otelcodes.Error, msg)
+		span.AddEvent(msg)
 		return out, fmt.Errorf("failed to prepare order: %+v", err)
 	}
 	shippingUSD, err := cs.quoteShipping(ctx, address, cartItems)

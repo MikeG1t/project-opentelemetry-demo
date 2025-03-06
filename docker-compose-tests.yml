@@ -48,6 +48,9 @@ services:
       - RECOMMENDATION_ADDR
       - SHIPPING_ADDR
       - KAFKA_ADDR
+      - CONFLUENT_BROKER=${CONFLUENT_BROKER}
+      - CONFLUENT_API_KEY=${CONFLUENT_API_KEY}
+      - CONFLUENT_API_SECRET=${CONFLUENT_API_SECRET}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:

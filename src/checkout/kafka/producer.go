@@ -3,41 +3,59 @@
 package kafka
 
 import (
+	"fmt"
+	"os"
+
 	"github.com/IBM/sarama"
 	"github.com/sirupsen/logrus"
 )
 
 var (
-	Topic           = "orders"
-	ProtocolVersion = sarama.V3_0_0_0
+	Topic = "orders"
 )
 
-func CreateKafkaProducer(brokers []string, log *logrus.Logger) (sarama.AsyncProducer, error) {
-	sarama.Logger = log
+func CreateKafkaProducer(log *logrus.Logger) (sarama.AsyncProducer, error) {
+	// Retrieve Confluent Cloud configuration from environment variables
+	broker := os.Getenv("CONFLUENT_BROKER")
+	apiKey := os.Getenv("CONFLUENT_API_KEY")
+	apiSecret := os.Getenv("CONFLUENT_API_SECRET")
 
-	saramaConfig := sarama.NewConfig()
-	saramaConfig.Producer.Return.Successes = true
-	saramaConfig.Producer.Return.Errors = true
-
-	// Sarama has an issue in a single broker kafka if the kafka broker is restarted.
-	// This setting is to prevent that issue from manifesting itself, but may swallow failed messages.
-	saramaConfig.Producer.RequiredAcks = sarama.NoResponse
-
-	saramaConfig.Version = ProtocolVersion
-
-	// So we can know the partition and offset of messages.
-	saramaConfig.Producer.Return.Successes = true
-
-	producer, err := sarama.NewAsyncProducer(brokers, saramaConfig)
-	if err != nil {
-		return nil, err
+	if broker == "" || apiKey == "" || apiSecret == "" {
+		return nil, fmt.Errorf("Confluent Cloud configuration not found in environment variables. Please set CONFLUENT_BROKER, CONFLUENT_API_KEY, and CONFLUENT_API_SECRET")
 	}
 
-	// We will log to STDOUT if we're not able to produce messages.
+	// Sarama logger setup
+	sarama.Logger = log
+
+	// Sarama configuration
+	config := sarama.NewConfig()
+	config.Producer.Return.Successes = true
+	config.Producer.Return.Errors = true
+	config.Producer.RequiredAcks = sarama.WaitForAll // Ensure messages are acknowledged
+	config.Version = sarama.V3_0_0_0
+
+	// SASL configuration for Confluent Cloud
+	config.Net.SASL.Enable = true
+	config.Net.SASL.User = apiKey
+	config.Net.SASL.Password = apiSecret
+	config.Net.SASL.Mechanism = sarama.SASLTypePlaintext
+	config.Net.TLS.Enable = true // Enable TLS for secure connection
+
+	// Create the producer
+	producer, err := sarama.NewAsyncProducer([]string{broker}, config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Kafka producer: %w", err)
+	}
+
+	// Handle errors from the producer
 	go func() {
 		for err := range producer.Errors() {
-			log.Errorf("Failed to write message: %+v", err)
+			log.Errorf("Failed to produce message: %v", err)
 		}
 	}()
+
+	log.Info("Kafka producer connected to Confluent Cloud")
+
 	return producer, nil
 }
+
